@@ -138,20 +138,24 @@ zeroTolerance = 0.00001
     equationsSetUserNumber,
     problemUserNumber) = range(1,19)
 
+worldRegion = iron.Region()
+iron.Context.WorldRegionGet(worldRegion)
+
 # Get the computational nodes information
 computationEnvironment = iron.ComputationEnvironment()
+iron.Context.ComputationEnvironmentGet(computationEnvironment)
 numberOfComputationalNodes = computationEnvironment.NumberOfWorldNodesGet()
 computationalNodeNumber = computationEnvironment.WorldNodeNumberGet()
 
 # Create a RC coordinate system
 coordinateSystem = iron.CoordinateSystem()
-coordinateSystem.CreateStart(coordinateSystemUserNumber)
+coordinateSystem.CreateStart(coordinateSystemUserNumber,iron.Context)
 coordinateSystem.dimension = 3
 coordinateSystem.CreateFinish()
 
 # Create a region
 region = iron.Region()
-region.CreateStart(regionUserNumber,iron.WorldRegion)
+region.CreateStart(regionUserNumber,worldRegion)
 region.label = "FittingRegion"
 region.coordinateSystem = coordinateSystem
 region.CreateFinish()
@@ -162,7 +166,7 @@ region.CreateFinish()
 
 # Create a tricubic Hermite basis
 basis = iron.Basis()
-basis.CreateStart(basisUserNumber)
+basis.CreateStart(basisUserNumber,iron.Context)
 basis.type = iron.BasisTypes.LAGRANGE_HERMITE_TP
 basis.numberOfXi = 3
 basis.interpolationXi = [iron.BasisInterpolationSpecifications.CUBIC_HERMITE]*3
@@ -584,7 +588,7 @@ problem = iron.Problem()
 problemSpecification = [iron.ProblemClasses.FITTING,
                         iron.ProblemTypes.DATA_FITTING,
                         iron.ProblemSubtypes.STATIC_FITTING]
-problem.CreateStart(problemUserNumber, problemSpecification)
+problem.CreateStart(problemUserNumber,iron.Context,problemSpecification)
 problem.CreateFinish()
 
 # Create control loops
@@ -682,4 +686,4 @@ for iteration in range (1,numberOfIterations+1):
     fields.ElementsExport("DeformedGeometry" + str(iteration),"FORTRAN")
     fields.Finalise()
 
-iron.Finalise()
+iron.Finalise(iron.Context)
