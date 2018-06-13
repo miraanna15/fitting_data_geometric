@@ -646,3 +646,79 @@ def read_string_regex(f, string, regex):
         return match.group(1)
     else:
         return match.groups()
+
+
+# defining the output file to be written in the ExDataFile
+def writeExdataFile(filename, dataPointLocations, dataErrorVector,
+                    dataErrorDistance, offset):
+    "Writes data points to an exdata file"
+
+    numberOfDimensions = dataPointLocations[0].shape[0]
+    try:
+        f = open(filename, "w")
+        if numberOfDimensions == 1:
+            header = '''Group name: DataPoints
+ #Fields=3
+ 1) data_coordinates, coordinate, rectangular cartesian, #Components=''' + str(
+                numberOfDimensions) + '''
+  x.  Value index=1, #Derivatives=0, #Versions=1
+ 2) data_error, field, rectangular cartesian, #Components=''' + str(
+                numberOfDimensions) + '''
+  x.  Value index=2, #Derivatives=0, #Versions=1
+ 3) data_distance, field, real, #Components=1
+  1.  Value index=3, #Derivatives=0, #Versions=1
+'''
+        elif numberOfDimensions == 2:
+            header = '''Group name: DataPoints
+ #Fields=3
+ 1) data_coordinates, coordinate, rectangular cartesian, #Components=''' + str(
+                numberOfDimensions) + '''
+  x.  Value index=1, #Derivatives=0, #Versions=1
+  y.  Value index=2, #Derivatives=0, #Versions=1
+ 2) data_error, field, rectangular cartesian, #Components=''' + str(
+                numberOfDimensions) + '''
+  x.  Value index=3, #Derivatives=0, #Versions=1
+  y.  Value index=4, #Derivatives=0, #Versions=1
+ 3) data_distance, field, real, #Components=1
+  1.  Value index=5, #Derivatives=0, #Versions=1
+'''
+        elif numberOfDimensions == 3:
+            header = '''Group name: DataPoints
+ #Fields=3
+ 1) data_coordinates, coordinate, rectangular cartesian, #Components=''' + str(
+                numberOfDimensions) + '''
+  x.  Value index=1, #Derivatives=0, #Versions=1
+  y.  Value index=2, #Derivatives=0, #Versions=1
+  x.  Value index=3, #Derivatives=0, #Versions=1
+ 2) data_error, field, rectangular cartesian, #Components=''' + str(
+                numberOfDimensions) + '''
+  x.  Value index=4, #Derivatives=0, #Versions=1
+  y.  Value index=5, #Derivatives=0, #Versions=1
+  z.  Value index=6, #Derivatives=0, #Versions=1
+ 3) data_distance, field, real, #Components=1
+  1.  Value index=7, #Derivatives=0, #Versions=1
+'''
+        f.write(header)
+
+        numberOfDataPoints = len(dataPointLocations)
+        for i in range(numberOfDataPoints):
+            line = " Node: " + str(offset + i + 1) + '\n'
+            f.write(line)
+            for j in range(numberOfDimensions):
+                line = ' ' + str(dataPointLocations[i, j]) + '\t'
+                f.write(line)
+            line = '\n'
+            f.write(line)
+            for j in range(numberOfDimensions):
+                line = ' ' + str(dataErrorVector[i, j]) + '\t'
+                f.write(line)
+            line = '\n'
+            f.write(line)
+            line = ' ' + str(dataErrorDistance[i])
+            f.write(line)
+            line = '\n'
+            f.write(line)
+        f.close()
+
+    except IOError:
+        print ('Could not open file: ' + filename)
