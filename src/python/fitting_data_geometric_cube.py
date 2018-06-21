@@ -23,11 +23,17 @@ def fit(numberGlobalXElements, numberGlobalYElements, numberGlobalZElements,
     numberOfDimensions = 3
     NumberOfGaussXi = 2
 
+    nonlinearFit = True
+    smoothing = False
     numberOfFitIterations = 3
 
-    # Set Sobolev smoothing parameters
-    tau = 0.0
-    kappa = 0.0
+    if smoothing:
+        smoothingType = iron.EquationsSetFittingSmoothingTypes.SOBOLEV_VALUE
+        # Set Sobolev smoothing parameters
+        tau = 0.0
+        kappa = 0.0
+    else:
+        smoothingType = iron.EquationsSetFittingSmoothingTypes.NONE
 
     coordinateSystemUserNumber = 1
     regionUserNumber = 1
@@ -212,7 +218,7 @@ def fit(numberGlobalXElements, numberGlobalYElements, numberGlobalZElements,
     dataProjection.RelativeToleranceSet(1.0e-14)
     dataProjection.MaximumNumberOfIterationsSet(int(1e9))
     dataProjection.ProjectionTypeSet(
-        iron.DataProjectionProjectionTypes.BOUNDARY_FACES)
+        iron.DataProjectionProjectionTypes.ALL_ELEMENTS)
     dataProjection.CreateFinish()
 
     # Evaluate data projection based on geometric field
@@ -242,17 +248,23 @@ def fit(numberGlobalXElements, numberGlobalYElements, numberGlobalZElements,
 
     # write data points to exdata file for CMGUI
     offset = 0
-    exfile.writeExdataFile(
-        "DataPoints.part" + str(computationalNodeNumber) + ".exdata",
-        dataPointLocations, dataErrorVector, dataErrorDistance, offset)
+    #exfile.writeExdataFile(
+    #    "DataPoints.part" + str(computationalNodeNumber) + ".exdata",
+    #    dataPointLocations, dataErrorVector, dataErrorDistance, offset)
     print("Projection complete")
 
     equationsSetField = iron.Field()
     equationsSet = iron.EquationsSet()
-    equationsSetSpecification = [iron.EquationsSetClasses.FITTING,
-                                 iron.EquationsSetTypes.DATA_FITTING_EQUATION,
-                                 iron.EquationsSetSubtypes.DATA_POINT_FITTING,
-                                 iron.EquationsSetFittingSmoothingTypes.SOBOLEV_VALUE]
+    if nonlinearFit:
+        equationsSetSpecification = [iron.EquationsSetClasses.FITTING,
+                                     iron.EquationsSetTypes.DATA_FITTING_EQUATION,
+                                     iron.EquationsSetSubtypes.DIFFUSION_TENSOR_FIBRE_FITTING,
+                                     smoothingType]
+    else:
+        equationsSetSpecification = [iron.EquationsSetClasses.FITTING,
+                                     iron.EquationsSetTypes.DATA_FITTING_EQUATION,
+                                     iron.EquationsSetSubtypes.DATA_POINT_FITTING,
+                                     smoothingType]
     equationsSet.CreateStart(equationsSetUserNumber, region, geometricField,
                              equationsSetSpecification,
                              equationsSetFieldUserNumber, equationsSetField)
@@ -303,15 +315,16 @@ def fit(numberGlobalXElements, numberGlobalYElements, numberGlobalZElements,
                     iron.FieldVariableTypes.U, iron.FieldParameterSetTypes.VALUES,
                     elementNumber, dataPointId, component, dataList[componentIdx])
 
+    if smoothing:
     # Create material field (Sobolev parameters)
-    materialField = iron.Field()
-    equationsSet.MaterialsCreateStart(materialFieldUserNumber,materialField)
-    materialField.VariableLabelSet(iron.FieldVariableTypes.U,"SmoothingParameters")
-    equationsSet.MaterialsCreateFinish()
+        materialField = iron.Field()
+        equationsSet.MaterialsCreateStart(materialFieldUserNumber,materialField)
+        materialField.VariableLabelSet(iron.FieldVariableTypes.U,"SmoothingParameters")
+        equationsSet.MaterialsCreateFinish()
 
-    # Set kappa and tau - Sobolev smoothing parameters
-    materialField.ComponentValuesInitialiseDP(iron.FieldVariableTypes.U,iron.FieldParameterSetTypes.VALUES,1,tau)
-    materialField.ComponentValuesInitialiseDP(iron.FieldVariableTypes.U,iron.FieldParameterSetTypes.VALUES,2,kappa)
+        # Set kappa and tau - Sobolev smoothing parameters
+        materialField.ComponentValuesInitialiseDP(iron.FieldVariableTypes.U,iron.FieldParameterSetTypes.VALUES,1,tau)
+        materialField.ComponentValuesInitialiseDP(iron.FieldVariableTypes.U,iron.FieldParameterSetTypes.VALUES,2,kappa)
 
     # Create equations
     equations = iron.Equations()
@@ -327,9 +340,14 @@ def fit(numberGlobalXElements, numberGlobalYElements, numberGlobalZElements,
 
     # Create fitting problem
     problem = iron.Problem()
-    problemSpecification = [iron.ProblemClasses.FITTING,
-                            iron.ProblemTypes.DATA_FITTING,
-                            iron.ProblemSubtypes.STATIC_FITTING]
+    if nonlinearFit:
+        problemSpecification = [iron.ProblemClasses.FITTING,
+                                iron.ProblemTypes.FIBRE_FITTING,
+                                iron.ProblemSubtypes.STATIC_NONLINEAR_FITTING]
+    else:
+        problemSpecification = [iron.ProblemClasses.FITTING,
+                                iron.ProblemTypes.DATA_FITTING,
+                                iron.ProblemSubtypes.STATIC_FITTING]
     problem.CreateStart(problemUserNumber, problemSpecification)
     problem.CreateFinish()
 
@@ -337,17 +355,32 @@ def fit(numberGlobalXElements, numberGlobalYElements, numberGlobalZElements,
     problem.ControlLoopCreateStart()
     problem.ControlLoopCreateFinish()
 
-    # Create problem solver
-    solver = iron.Solver()
-    problem.SolversCreateStart()
-    problem.SolverGet([iron.ControlLoopIdentifiers.NODE], 1, solver)
-    solver.outputType = iron.SolverOutputTypes.NONE
-    # solver.outputType = iron.SolverOutputTypes.MATRIX
-    solver.linearType = iron.LinearSolverTypes.ITERATIVE
-    # solver.LibraryTypeSet(iron.SolverLibraries.UMFPACK) # UMFPACK/SUPERLU
-    solver.linearIterativeAbsoluteTolerance = 1.0E-10
-    solver.linearIterativeRelativeTolerance = 1.0E-05
-    problem.SolversCreateFinish()
+    if nonlinearFit:
+        # Create problem solver
+        nonLinearSolver = iron.Solver()
+        linearSolver = iron.Solver()
+        problem.SolversCreateStart()
+        problem.SolverGet([iron.ControlLoopIdentifiers.NODE],1,nonLinearSolver)
+        nonLinearSolver.outputType = iron.SolverOutputTypes.PROGRESS
+        nonLinearSolver.NewtonJacobianCalculationTypeSet(iron.JacobianCalculationTypes.FD)
+        nonLinearSolver.NewtonLinearSolverGet(linearSolver)
+        nonLinearSolver.NewtonAbsoluteToleranceSet(1e-14)
+        nonLinearSolver.NewtonSolutionToleranceSet(1e-14)
+        nonLinearSolver.NewtonRelativeToleranceSet(1e-14)
+        linearSolver.linearType = iron.LinearSolverTypes.ITERATIVE
+        problem.SolversCreateFinish()
+    else:
+        # Create problem solver
+        solver = iron.Solver()
+        problem.SolversCreateStart()
+        problem.SolverGet([iron.ControlLoopIdentifiers.NODE], 1, solver)
+        solver.outputType = iron.SolverOutputTypes.NONE
+        # solver.outputType = iron.SolverOutputTypes.MATRIX
+        solver.linearType = iron.LinearSolverTypes.ITERATIVE
+        # solver.LibraryTypeSet(iron.SolverLibraries.UMFPACK) # UMFPACK/SUPERLU
+        solver.linearIterativeAbsoluteTolerance = 1.0E-10
+        solver.linearIterativeRelativeTolerance = 1.0E-05
+        problem.SolversCreateFinish()
 
     # Create solver equations and add equations set to solver equations
     solver = iron.Solver()
